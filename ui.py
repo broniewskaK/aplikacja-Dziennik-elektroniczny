@@ -1,39 +1,44 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+from auth import login
+from charts import generate_chart, generate_attendance_pie_chart, generate_attendance_comparison_chart
 from messages import load_teachers, send_message, load_received_messages, load_sent_messages
 from data_loader import load_grades, load_attendance, load_timetable
-from charts import generate_chart  # Import funkcji generującej wykresy
+from custom_ui import style_window, create_header, create_label, create_entry, create_button, create_tab_control, \
+    create_tab, create_text, create_treeview, add_scrollbar
+
+
+def style_window(window):
+    window.configure(bg="#E8EAF6")
+    window.geometry("800x750")  # Zwiększony wymiar okna
 
 
 def create_login_ui(root, parents, show_parent_panel):
+    # Stylizacja okna
+    style_window(root)
+
     # Nagłówek
-    header = tk.Label(root, text="Dziennik elektroniczny", font=("Helvetica", 24))
-    header.grid(row=0, column=0, columnspan=2, pady=20)
+    create_header(root, "Dziennik elektroniczny")
 
     # Formularz logowania
-    tk.Label(root, text="Login").grid(row=1, column=0, padx=10, pady=10)
-    tk.Label(root, text="Hasło").grid(row=2, column=0, padx=10, pady=10)
+    create_label(root, "Login:")
+    entry_login = create_entry(root)
 
-    entry_login = tk.Entry(root)
-    entry_password = tk.Entry(root, show="*")
+    create_label(root, "Hasło:")
+    entry_password = create_entry(root, show="*")
 
-    entry_login.grid(row=1, column=1, padx=10, pady=10)
-    entry_password.grid(row=2, column=1, padx=10, pady=10)
-
-    from auth import login
-    tk.Button(root, text="Zaloguj się",
-              command=lambda: login(entry_login, entry_password, parents, root, show_parent_panel)).grid(row=3,
-                                                                                                         column=1,
-                                                                                                         pady=20)
+    # Przycisk logowania
+    create_button(root, "Zaloguj się", lambda: login(entry_login, entry_password, parents, root, show_parent_panel))
 
     # Przycisk Wyjście
-    tk.Button(root, text="Wyjście", command=root.quit).grid(row=4, column=1, pady=10)
+    create_button(root, "Wyjście", root.quit, bg_color="#D32F2F")
 
 
 def create_parent_panel(login, root, parents_data, students):
     parent_panel = tk.Toplevel()
     parent_panel.title("Panel Rodzica")
+    style_window(parent_panel)
 
     # Pobierz id rodzica na podstawie loginu
     parent_id = next((row[0] for row in parents_data if row[3] == login), None)
@@ -48,54 +53,87 @@ def create_parent_panel(login, root, parents_data, students):
         return
 
     # Dodaj zakładki
-    tab_control = ttk.Notebook(parent_panel)
+    tab_control = create_tab_control(parent_panel)
 
-    grades_tab = ttk.Frame(tab_control)
-    attendance_tab = ttk.Frame(tab_control)
-    timetable_tab = ttk.Frame(tab_control)
-    messages_tab = ttk.Frame(tab_control)
+    grades_tab = create_tab(parent_panel, tab_control, "Oceny")
+    attendance_tab = create_tab(parent_panel, tab_control, "Frekwencja")
+    timetable_tab = create_tab(parent_panel, tab_control, "Plan Lekcji")
+    messages_tab = create_tab(parent_panel, tab_control, "Wiadomości")
 
-    tab_control.add(grades_tab, text="Oceny")
-    tab_control.add(attendance_tab, text="Frekwencja")
-    tab_control.add(timetable_tab, text="Plan Lekcji")
-    tab_control.add(messages_tab, text="Wiadomości")
-
-    tab_control.pack(expand=1, fill="both")
-
-    # Wyświetl oceny dla każdego dziecka
-    ttk.Label(grades_tab, text="Oceny").pack()
-    grades_tree = ttk.Treeview(grades_tab, columns=("klasa", "imię", "nazwisko", "przedmiot", "ocena"), show="headings")
-    for col in grades_tree["columns"]:
-        grades_tree.heading(col, text=col)
+    # Wyświetl oceny dla każdego dziecka w formie tekstowej
     grades = load_grades()
     for child in children:
+        create_label(grades_tab, f"Oceny dla {child[1]} {child[2]}")
         child_grades = [grade for grade in grades if grade[1] == child[1] and grade[2] == child[2]]
-        for row in child_grades:
-            grades_tree.insert("", tk.END, values=row)
-    grades_tree.pack(fill="both", expand=True)
+
+        subjects = list(set(grade[3] for grade in child_grades))
+        for subject in subjects:
+            subject_grades = [grade[4] for grade in child_grades if grade[3] == subject]
+            create_label(grades_tab, f"{subject}: {', '.join(subject_grades)}")
 
     # Dodaj przycisk generowania wykresu
-    generate_chart_button = tk.Button(grades_tab, text="Wygeneruj wykres",
-                                      command=lambda: generate_chart(login, grades, students, parents_data))
-    generate_chart_button.pack(pady=10)
+    create_button(grades_tab, "Wygeneruj wykres", lambda: generate_chart(login, grades, students, parents_data))
 
-    # Wyświetl frekwencję dla każdego dziecka
-    ttk.Label(attendance_tab, text="Frekwencja").pack()
-    attendance_tree = ttk.Treeview(attendance_tab,
-                                   columns=("klasa", "imię", "nazwisko", "przedmiot", "data", "obecność"),
-                                   show="headings")
-    for col in attendance_tree["columns"]:
-        attendance_tree.heading(col, text=col)
+    # Wyświetl frekwencję dla każdego dziecka w formie tabeli
     attendance = load_attendance()
+
+    def show_attendance(child_attendance):
+        for widget in attendance_tab.winfo_children():
+            widget.destroy()
+
+        create_label(attendance_tab, f"Frekwencja dla {child[1]} {child[2]}")
+
+        # Utworzenie tabeli
+        columns = ["Data"]
+        tree = ttk.Treeview(attendance_tab, columns=columns, show="headings")
+        tree.pack(fill="both", expand=True)
+
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, anchor="center")
+
+        # Grupowanie obecności według daty, sortowanie od najnowszej do najstarszej
+        dates = sorted(list(set(att[4] for att in child_attendance)), reverse=True)
+        for date in dates:
+            date_attendance = [att for att in child_attendance if att[4] == date]
+            absent_subjects = [att for att in date_attendance if att[5] == "nieobecny"]
+            if absent_subjects:
+                tree.insert("", tk.END, values=(date,), tags=("date",))
+                tree.insert("", tk.END, values=("Nieobecny",), tags=("absent", date))
+            else:
+                tree.insert("", tk.END, values=(date,), tags=("date",))
+                tree.insert("", tk.END, values=("Obecny",), tags=("present", date))
+
+        tree.tag_configure("date", font=("Helvetica", 12, "bold"))
+        tree.tag_configure("absent", font=("Helvetica", 12))
+        tree.tag_configure("present", font=("Helvetica", 12))
+
+        # Event kliknięcia na "Nieobecny" lub "Obecny"
+        def on_click(event):
+            item = tree.selection()[0]
+            tags = tree.item(item, "tags")
+            if len(tags) == 2:
+                date = tags[1]
+                show_details(date, child_attendance)
+
+        tree.bind("<Double-1>", on_click)
+
+    def show_details(date, child_attendance):
+        details_window = tk.Toplevel(attendance_tab)
+        details_window.title(f"Frekwencja - {date}")
+        style_window(details_window)
+
+        details = [att for att in child_attendance if att[4] == date]
+        for att in details:
+            create_label(details_window, f"{att[3]}: {att[5]}")
+
     for child in children:
         child_attendance = [att for att in attendance if att[1] == child[1] and att[2] == child[2]]
-        for row in child_attendance:
-            attendance_tree.insert("", tk.END, values=row)
-    attendance_tree.pack(fill="both", expand=True)
+        show_attendance(child_attendance)
 
     # Wyświetl plan lekcji dla klasy dziecka (zakładamy, że wszystkie dzieci są w tej samej klasie)
     class_name = children[0][0]
-    ttk.Label(timetable_tab, text=f"Plan Lekcji dla klasy {class_name}").pack()
+    create_label(timetable_tab, f"Plan Lekcji dla klasy {class_name}")
 
     # Przygotowanie tabeli planu lekcji
     timetable_frame = ttk.Frame(timetable_tab)
@@ -110,52 +148,51 @@ def create_parent_panel(login, root, parents_data, students):
 
     # Utworzenie nagłówków kolumn
     for col_num, day in enumerate(["Godzina"] + days):
-        ttk.Label(timetable_frame, text=day, borderwidth=1, relief="solid").grid(row=0, column=col_num, sticky="nsew")
+        tk.Label(timetable_frame, text=day, font=("Helvetica", 12, "bold"), borderwidth=1, relief="solid").grid(row=0,
+                                                                                                                column=col_num,
+                                                                                                                sticky="nsew")
 
     # Wypełnianie tabeli planu lekcji
     for row_num, hour in enumerate(hours, start=1):
-        ttk.Label(timetable_frame, text=hour, borderwidth=1, relief="solid").grid(row=row_num, column=0, sticky="nsew")
+        tk.Label(timetable_frame, text=hour, font=("Helvetica", 12), borderwidth=1, relief="solid").grid(row=row_num,
+                                                                                                         column=0,
+                                                                                                         sticky="nsew")
         for col_num, day in enumerate(days, start=1):
             subject = next((row[3] for row in class_timetable if row[1] == day and row[2] == hour), "")
             teacher = next((row[4] for row in class_timetable if row[1] == day and row[2] == hour), "")
             text = f"{subject}\n{teacher}" if subject else ""
-            ttk.Label(timetable_frame, text=text, borderwidth=1, relief="solid").grid(row=row_num, column=col_num,
-                                                                                      sticky="nsew")
+            tk.Label(timetable_frame, text=text, font=("Helvetica", 12), borderwidth=1, relief="solid").grid(
+                row=row_num, column=col_num, sticky="nsew")
 
     # Zakładka Wiadomości
-    ttk.Label(messages_tab, text="Wyślij wiadomość do nauczyciela").pack()
+    create_label(messages_tab, "Wyślij wiadomość do nauczyciela")
 
     teachers = load_teachers()
     teacher_names = [f"{teacher[1]} {teacher[2]}" for teacher in teachers]
 
-    ttk.Label(messages_tab, text="Nauczyciel:").pack()
-    teacher_combobox = ttk.Combobox(messages_tab, values=teacher_names)
-    teacher_combobox.pack()
+    create_label(messages_tab, "Nauczyciel:")
+    teacher_combobox = ttk.Combobox(messages_tab, values=teacher_names, font=("Helvetica", 12))
+    teacher_combobox.pack(pady=5)
 
-    ttk.Label(messages_tab, text="Treść wiadomości:").pack()
-    message_text = tk.Text(messages_tab, height=5, width=40)
-    message_text.pack()
+    create_label(messages_tab, "Treść wiadomości:")
+    message_text = create_text(messages_tab, height=3, width=40)
+
+    create_button(messages_tab, "Wyślij", lambda: send_message_to_teacher())
 
     # Zakładka Wiadomości (Odebrane i Wysłane)
-    ttk.Label(messages_tab, text="Odebrane wiadomości").pack()
-    received_tree = ttk.Treeview(messages_tab, columns=("Od", "Treść"), show="headings")
-    received_tree.heading("Od", text="Od")
-    received_tree.heading("Treść", text="Treść")
+    create_label(messages_tab, "Odebrane wiadomości")
+    received_tree = create_treeview(messages_tab, columns=("Od", "Treść"), height=3)
 
     received_messages = load_received_messages(login)
     for msg in received_messages:
         received_tree.insert("", tk.END, values=(msg[0], msg[2]))
-    received_tree.pack(fill="both", expand=True)
 
-    ttk.Label(messages_tab, text="Wysłane wiadomości").pack()
-    sent_tree = ttk.Treeview(messages_tab, columns=("Do", "Treść"), show="headings")
-    sent_tree.heading("Do", text="Do")
-    sent_tree.heading("Treść", text="Treść")
+    create_label(messages_tab, "Wysłane wiadomości")
+    sent_tree = create_treeview(messages_tab, columns=("Do", "Treść"), height=5)
 
     sent_messages = load_sent_messages(login)
     for msg in sent_messages:
         sent_tree.insert("", tk.END, values=(msg[1], msg[2]))
-    sent_tree.pack(fill="both", expand=True)
 
     def send_message_to_teacher():
         selected_teacher = teacher_combobox.get()
@@ -173,9 +210,6 @@ def create_parent_panel(login, root, parents_data, students):
         else:
             tk.messagebox.showerror("Błąd", "Musisz wybrać nauczyciela i napisać wiadomość.")
 
-    send_button = ttk.Button(messages_tab, text="Wyślij", command=send_message_to_teacher)
-    send_button.pack()
-
     def on_closing():
         root.deiconify()  # Przywróć główne okno
         parent_panel.destroy()
@@ -183,5 +217,4 @@ def create_parent_panel(login, root, parents_data, students):
     parent_panel.protocol("WM_DELETE_WINDOW", on_closing)
 
     # Przycisk Wyjście w panelu rodzica
-    exit_button = ttk.Button(parent_panel, text="Wyjście", command=root.quit)
-    exit_button.pack(side=tk.RIGHT, padx=10, pady=10)
+    create_button(parent_panel, "Wyjście", root.quit, bg_color="#D32F2F").pack(side=tk.BOTTOM, padx=10, pady=10)
