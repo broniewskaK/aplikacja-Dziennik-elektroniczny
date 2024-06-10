@@ -11,7 +11,7 @@ def load_parents():  # ładuje dane rodzicow jako slownik, klucz to login, warto
                 parents[login] = hasło
     return parents
 
-def load_parents_data(): # ładuje dane rodziców i zwraca je w firmie listy
+def load_parents_data(): # ładuje dane rodziców i zwraca je w formie listy
     parents_data = []
     with open("parents.csv", "r") as file:
         reader = csv.reader(file)

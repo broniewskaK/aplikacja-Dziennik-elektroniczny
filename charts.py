@@ -3,7 +3,7 @@ from tkinter import ttk
 from tkinter import messagebox
 import matplotlib.pyplot as plt
 
-def generate_chart(login, grades, students, parents_data): # funckja generuje wykres porównawczy średnioch ocen dziecka i jego klasy dla przedmiotu
+def generate_chart(login, grades, students, parents_data): # funkcja generuje wykres porównawczy średnich ocen dziecka i jego klasy dla przedmiotu
     # pobieranie id rodzica na podstawie loginu
     parent_id = next((row[0] for row in parents_data if row[3] == login), None)
     # znajdowanie dziecka uzytkownika
