@@ -1,58 +1,58 @@
 import tkinter as tk
 from tkinter import ttk
-from tkinter import messagebox
-from auth import login
+from tkinter import messagebox #moduł do wyświetlania komunikatów
+from auth import login # odpowiedzialny za logowanie użytkownika
 from charts import generate_chart, generate_attendance_pie_chart, generate_attendance_comparison_chart
 from messages import load_teachers, send_message, load_received_messages, load_sent_messages
 from data_loader import load_grades, load_attendance, load_timetable
 from custom_ui import style_window, create_header, create_label, create_entry, create_button, create_tab_control, \
-    create_tab, create_text, create_treeview, add_scrollbar
+    create_tab, create_text, create_treeview
 
 
 def style_window(window):
-    window.configure(bg="#E8EAF6")
-    window.geometry("800x750")  # Zwiększony wymiar okna
+    window.configure(bg="#E8EAF6") #ustawienie tła okna na odpowiedni kolor
+    window.geometry("800x750")  #  wymiar okna
 
 
-def create_login_ui(root, parents, show_parent_panel):
-    # Stylizacja okna
+def create_login_ui(root, parents, show_parent_panel): # funkcja tworzy interfejs logowania,dodaje nagłowek, pola tekstowe do loginu i hasła oraz przyciski do logowania i wyjścia
+    # wyglad okna
     style_window(root)
 
-    # Nagłówek
+    # nagłówek
     create_header(root, "Dziennik elektroniczny")
 
-    # Formularz logowania
+    # panel logowania
     create_label(root, "Login:")
     entry_login = create_entry(root)
 
     create_label(root, "Hasło:")
     entry_password = create_entry(root, show="*")
 
-    # Przycisk logowania
+    # przycisk logowania
     create_button(root, "Zaloguj się", lambda: login(entry_login, entry_password, parents, root, show_parent_panel))
 
-    # Przycisk Wyjście
-    create_button(root, "Wyjście", root.quit, bg_color="#D32F2F")
+    # przycisk wyjścia
+    create_button(root, "Wyjście", root.quit, bg_color="#000000", fg_color="white")
 
 
-def create_parent_panel(login, root, parents_data, students):
+def create_parent_panel(login, root, parents_data, students):# funkcja tworzy panel rodzica zawierający zakladki, wyświetla oceny frekwencje, interfejs do wysyłania wiadomości i dodaje przyciski do generowania wykresów
     parent_panel = tk.Toplevel()
     parent_panel.title("Panel Rodzica")
     style_window(parent_panel)
 
-    # Pobierz id rodzica na podstawie loginu
+    # pobierz id rodzica na podstawie loginu
     parent_id = next((row[0] for row in parents_data if row[3] == login), None)
 
-    # Znajdź dzieci tego rodzica
+    # znajdź dzieci tego użytkownika
     children = [student for student in students if student[3] == parent_id]
 
     if not children:
         tk.messagebox.showerror("Błąd", "Nie znaleziono dzieci dla tego rodzica.")
-        root.deiconify()  # Przywróć główne okno
+        root.deiconify()  # powrót głowne okno
         parent_panel.destroy()
         return
 
-    # Dodaj zakładki
+    # dodawanie zakładek
     tab_control = create_tab_control(parent_panel)
 
     grades_tab = create_tab(parent_panel, tab_control, "Oceny")
@@ -60,7 +60,7 @@ def create_parent_panel(login, root, parents_data, students):
     timetable_tab = create_tab(parent_panel, tab_control, "Plan Lekcji")
     messages_tab = create_tab(parent_panel, tab_control, "Wiadomości")
 
-    # Wyświetl oceny dla każdego dziecka w formie tekstowej
+    # wyswietlanie ocen dla dziecka
     grades = load_grades()
     for child in children:
         create_label(grades_tab, f"Oceny dla {child[1]} {child[2]}")
@@ -71,19 +71,29 @@ def create_parent_panel(login, root, parents_data, students):
             subject_grades = [grade[4] for grade in child_grades if grade[3] == subject]
             create_label(grades_tab, f"{subject}: {', '.join(subject_grades)}")
 
-    # Dodaj przycisk generowania wykresu
+    # dodawanie przycisku do wykresu
     create_button(grades_tab, "Wygeneruj wykres", lambda: generate_chart(login, grades, students, parents_data))
 
-    # Wyświetl frekwencję dla każdego dziecka w formie tabeli
+    # wyświetlenie frekwencji dla każdego dziecka w formie tabeli
     attendance = load_attendance()
 
-    def show_attendance(child_attendance):
+    def show_attendance(child_attendance): # funkcja do wyświetlania frekwencji dziecka
         for widget in attendance_tab.winfo_children():
-            widget.destroy()
+            widget.destroy() # usuwanie istniejacej frekwencji aby zaktualizowac dane
+
+        # dodanie ramki na przyciski na górze
+        button_frame = ttk.Frame(attendance_tab)
+        button_frame.pack(fill="x", pady=10)
+
+        # dodanie przycisków generowania wykresów frekwencji
+        create_button(button_frame, "Wykres kołowy frekwencji",
+                      lambda: generate_attendance_pie_chart(login, attendance, students, parents_data))
+        create_button(button_frame, "Frekwencja ucznia na tle klasy",
+                      lambda: generate_attendance_comparison_chart(login, attendance, students, parents_data))
 
         create_label(attendance_tab, f"Frekwencja dla {child[1]} {child[2]}")
 
-        # Utworzenie tabeli
+        # tworzenie tabeli
         columns = ["Data"]
         tree = ttk.Treeview(attendance_tab, columns=columns, show="headings")
         tree.pack(fill="both", expand=True)
@@ -92,7 +102,7 @@ def create_parent_panel(login, root, parents_data, students):
             tree.heading(col, text=col)
             tree.column(col, anchor="center")
 
-        # Grupowanie obecności według daty, sortowanie od najnowszej do najstarszej
+        # grupowanie obecności według daty, sortowanie daty
         dates = sorted(list(set(att[4] for att in child_attendance)), reverse=True)
         for date in dates:
             date_attendance = [att for att in child_attendance if att[4] == date]
@@ -108,7 +118,7 @@ def create_parent_panel(login, root, parents_data, students):
         tree.tag_configure("absent", font=("Helvetica", 12))
         tree.tag_configure("present", font=("Helvetica", 12))
 
-        # Event kliknięcia na "Nieobecny" lub "Obecny"
+        #  kliknięcie na "Nieobecny" lub "Obecny"
         def on_click(event):
             item = tree.selection()[0]
             tags = tree.item(item, "tags")
@@ -118,7 +128,7 @@ def create_parent_panel(login, root, parents_data, students):
 
         tree.bind("<Double-1>", on_click)
 
-    def show_details(date, child_attendance):
+    def show_details(date, child_attendance): # funkcja odpowiedzialna za wyswietlenie szczegółowych informacji o frekwencji w danym dniu. Wyswietlana po naciśnieniu Obecny lub Nieobecny
         details_window = tk.Toplevel(attendance_tab)
         details_window.title(f"Frekwencja - {date}")
         style_window(details_window)
@@ -131,28 +141,28 @@ def create_parent_panel(login, root, parents_data, students):
         child_attendance = [att for att in attendance if att[1] == child[1] and att[2] == child[2]]
         show_attendance(child_attendance)
 
-    # Wyświetl plan lekcji dla klasy dziecka (zakładamy, że wszystkie dzieci są w tej samej klasie)
+    # wyświetlenie planu lekcji dla klasy dziecka
     class_name = children[0][0]
     create_label(timetable_tab, f"Plan Lekcji dla klasy {class_name}")
 
-    # Przygotowanie tabeli planu lekcji
+    # przygotowanie tabeli planu lekcji
     timetable_frame = ttk.Frame(timetable_tab)
     timetable_frame.pack(fill="both", expand=True)
 
     timetable = load_timetable()
     class_timetable = [row for row in timetable if row[0] == class_name]
 
-    # Przygotowanie kolumn i wierszy
+    # przygotowanie kolumn i wierszy
     days = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek"]
     hours = sorted(set(row[2] for row in class_timetable), key=lambda x: int(x.split(':')[0]))  # Sortowanie godzin
 
-    # Utworzenie nagłówków kolumn
+    # tworzenie nagłówków kolumn
     for col_num, day in enumerate(["Godzina"] + days):
         tk.Label(timetable_frame, text=day, font=("Helvetica", 12, "bold"), borderwidth=1, relief="solid").grid(row=0,
                                                                                                                 column=col_num,
                                                                                                                 sticky="nsew")
 
-    # Wypełnianie tabeli planu lekcji
+    # wypełnianie tabeli planu lekcji
     for row_num, hour in enumerate(hours, start=1):
         tk.Label(timetable_frame, text=hour, font=("Helvetica", 12), borderwidth=1, relief="solid").grid(row=row_num,
                                                                                                          column=0,
@@ -164,7 +174,7 @@ def create_parent_panel(login, root, parents_data, students):
             tk.Label(timetable_frame, text=text, font=("Helvetica", 12), borderwidth=1, relief="solid").grid(
                 row=row_num, column=col_num, sticky="nsew")
 
-    # Zakładka Wiadomości
+    #  Wiadomości
     create_label(messages_tab, "Wyślij wiadomość do nauczyciela")
 
     teachers = load_teachers()
@@ -179,7 +189,7 @@ def create_parent_panel(login, root, parents_data, students):
 
     create_button(messages_tab, "Wyślij", lambda: send_message_to_teacher())
 
-    # Zakładka Wiadomości (Odebrane i Wysłane)
+    # Odebrane i Wysłane
     create_label(messages_tab, "Odebrane wiadomości")
     received_tree = create_treeview(messages_tab, columns=("Od", "Treść"), height=3)
 
@@ -216,5 +226,6 @@ def create_parent_panel(login, root, parents_data, students):
 
     parent_panel.protocol("WM_DELETE_WINDOW", on_closing)
 
-    # Przycisk Wyjście w panelu rodzica
-    create_button(parent_panel, "Wyjście", root.quit, bg_color="#D32F2F").pack(side=tk.BOTTOM, padx=10, pady=10)
+    #  Wyjście w panelu rodzica
+    create_button(parent_panel, "Wyjście", root.quit, bg_color="#000000", fg_color="white").pack(side=tk.BOTTOM,
+                                                                                                 padx=10, pady=10)
